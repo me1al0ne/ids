@@ -60,11 +60,11 @@ local state = true
 TextButton.MouseButton1Click:Connect (function()
     state = not state
     if not state then
-        TextButton.Text = "BladLock ON"
+        TextButton.Text = "Al0n3 Lock ON"
         CamlockState = true
         enemy = FindNearestEnemy()
     else
-        TextButton.Text = "BladLock OFF"
+        TextButton.Text = "Al0n3 Lock OFF"
         CamlockState = false
         enemy = nil
     end

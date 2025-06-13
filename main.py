@@ -18,11 +18,6 @@ logger = logging.getLogger('discord_multi_bot')
 def get_all_tokens():
     """Retrieve all bot tokens from environment variables"""
     tokens = []
-    # Get main token first
-    main_token = os.getenv('DISCORD_BOT_TOKEN_MAIN')
-    if main_token:
-        tokens.append(main_token)
-    
     # Get worker tokens (DISCORD_BOT_TOKEN_1, DISCORD_BOT_TOKEN_2, etc.)
     for i in range(1, 100):  # Support up to 99 worker accounts
         token = os.getenv(f'DISCORD_BOT_TOKEN_{i}')
@@ -40,7 +35,6 @@ class MultiBot:
     def __init__(self):
         self.bots = []
         self.tokens = get_all_tokens()
-        self.main_bot = None
         self.command_prefix = '+'
         self.is_ready = False
         
@@ -60,14 +54,20 @@ class MultiBot:
             
             # Register events
             bot.event(self.on_ready)
-            bot.event(self.on_command_error)
             
             # Only register commands on the first bot (main bot)
-            if not self.main_bot:
-                bot.command(name='share')(self.share_command)
-                bot.command(name='help')(self.help_command)
-                bot.command(name='status')(self.status_command)
-                self.main_bot = bot
+            if not self.bots:
+                @bot.command(name='share')
+                async def share(ctx, video_url: str):
+                    await self.share_command(ctx, video_url)
+                
+                @bot.command(name='help')
+                async def help(ctx):
+                    await self.help_command(ctx)
+                
+                @bot.command(name='status')
+                async def status(ctx):
+                    await self.status_command(ctx)
             
             self.bots.append(bot)
             tasks.append(bot.start(token))
@@ -77,22 +77,14 @@ class MultiBot:
     async def on_ready(self):
         """Called when a bot is ready"""
         if not self.is_ready:
-            logger.info(f"Main bot ready: {self.main_bot.user}")
-            await self.main_bot.change_presence(
+            logger.info(f"Main bot ready: {self.bots[0].user}")
+            await self.bots[0].change_presence(
                 activity=discord.Activity(
                     type=discord.ActivityType.watching,
                     name=f"{self.command_prefix}help"
                 )
             )
             self.is_ready = True
-    
-    async def on_command_error(self, ctx, error):
-        """Handle command errors"""
-        if isinstance(error, commands.CommandNotFound):
-            return  # Ignore unknown commands
-        
-        logger.error(f"Command error: {error}")
-        await ctx.send(f"❌ Error: {str(error)}")
     
     async def help_command(self, ctx):
         """Show help message"""
@@ -187,13 +179,14 @@ class MultiBot:
 if __name__ == "__main__":
     bot_manager = MultiBot()
     
-    # Start the bot system
-    loop = asyncio.get_event_loop()
+    # Start the bot system with proper event loop handling
+    async def main():
+        await bot_manager.start_bots()
+    
     try:
-        loop.run_until_complete(bot_manager.start_bots())
+        asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("Shutting down bots...")
+        # Properly close all bot connections
         for bot in bot_manager.bots:
-            loop.run_until_complete(bot.close())
-    finally:
-        loop.close()
+            asyncio.run(bot.close())
